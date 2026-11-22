@@ -1,0 +1,10 @@
+pluginManagement {
+    repositories {
+        maven { url = 'https://repo.kraken-plugins.com' }
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'Prayer-Flicker'
+
+include 'kraken-api-java11'

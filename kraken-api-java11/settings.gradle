@@ -1,0 +1,3 @@
+// Built from the parent KrakenPrayerFlicker settings. This file exists so the
+// sources can also be compiled on their own: gradle -p kraken-api-java11 jar
+rootProject.name = 'kraken-api-java11'

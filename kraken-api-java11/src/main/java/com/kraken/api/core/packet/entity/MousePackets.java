@@ -1,0 +1,296 @@
+package com.kraken.api.core.packet.entity;
+
+import com.google.inject.Inject;
+import com.google.inject.Provider;
+import com.google.inject.Singleton;
+import com.kraken.api.Context;
+import com.kraken.api.core.hooks.HooksLoader;
+import com.kraken.api.core.interaction.event.KrakenClickSent;
+import com.kraken.api.core.interaction.model.MenuOption;
+import com.kraken.api.core.packet.PacketClient;
+import com.kraken.api.core.packet.PacketFactory;
+import com.kraken.api.input.InputDispatch;
+import com.kraken.api.util.MathUtils;
+import com.kraken.api.util.RandomUtils;
+import lombok.Getter;
+import lombok.SneakyThrows;
+import net.runelite.api.Client;
+import net.runelite.api.Point;
+import net.runelite.client.eventbus.EventBus;
+
+import java.awt.event.KeyEvent;
+import java.lang.reflect.Field;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static java.awt.event.InputEvent.BUTTON1_DOWN_MASK;
+
+/**
+ * Sends the mouse click packet that precedes game interactions, and injects a synthetic keypress when the
+ * client's idle counters reach a randomised threshold. Posts {@link KrakenClickSent} after every click packet.
+ */
+@Singleton
+public class MousePackets {
+
+    @Inject
+    private Client client;
+
+    @Inject
+    private Provider<PacketClient> packetSenderProvider;
+
+    @Inject
+    private Provider<Context> ctxProvider;
+
+    @Inject
+    private EventBus eventBus;
+
+    /**
+     * Idle-tick threshold at which a synthetic keypress is injected to reset the client's idle
+     * counters, re-randomised each time it is crossed.
+     *
+     * <p>Deliberately static: the counters being watched ({@code getKeyboardIdleTicks} and
+     * {@code getMouseIdleTicks}) are client-wide, so every plugin observes the same idle state and one
+     * shared threshold produces one keypress per crossing. The compare-and-set below is what enforces
+     * that when several plugins click in the same instant.</p>
+     */
+    private static final AtomicLong idleResetThreshold = new AtomicLong(RandomUtils.randomDelay());
+
+    /**
+     * When the last click packet was sent, from {@link System#currentTimeMillis()}, or 0 before the first click.
+     */
+    @Getter
+    private volatile long lastClickMillis;
+
+    /**
+     * The canvas point of the last click packet, or null before the first click.
+     */
+    @Getter
+    private volatile Point lastClickPoint;
+
+    private final Object resolutionLock = new Object();
+    private volatile Field clientMillisField;
+    private volatile Field mouseHandlerLastPressedField;
+    private volatile Long clientMillisMultiplierInverse;
+    private volatile Long mouseHandlerMultiplierInverse;
+
+    /**
+     * Queues a click packet to send to the game server. The click packet should be sent before
+     * any game interaction (Widget, Movement, Npc, Object etc...) packets are sent. The click packet
+     * encapsulates the x and y coordinates of the canvas for the click that was made.
+     *
+     * <p>The timestamps this writes are the client's own, read and updated by the game thread on every
+     * frame, so the read-modify-write and the packet that carries its result are handed to the client
+     * thread as one unit. Blocks until that is done, which keeps a click ahead of the interaction it
+     * precedes.</p>
+     *
+     * @param x The x canvas coordinate.
+     * @param y The y canvas coordinate.
+     */
+    public void queueClickPacket(int x, int y) {
+        queueClickPacket(x, y, null, "", "");
+    }
+
+    /**
+     * Queues a click packet for an interaction on a menu entry, so the {@link KrakenClickSent} event posted after it
+     * names what the click acts on. Otherwise the same as {@link #queueClickPacket(int, int)}.
+     *
+     * @param x      The x canvas coordinate.
+     * @param y      The y canvas coordinate.
+     * @param option The menu entry the click acts on, or null.
+     * @param action The menu option text, or null.
+     * @param target The menu target text, or null.
+     */
+    public void queueClickPacket(int x, int y, MenuOption option, String action, String target) {
+        ctxProvider.get().runOnClientThread(() -> {
+            queueClickPacketOnClientThread(x, y);
+            postClickSent(option, action, target);
+            return Boolean.TRUE;
+        }, Boolean.FALSE);
+    }
+
+    /**
+     * Posts the event for the click packet just sent. Runs on the client thread only. The event bus catches and logs
+     * a subscriber's exception, so a failing subscriber cannot stop the interaction the click belongs to.
+     *
+     * @param option The menu entry the click acts on, or null.
+     * @param action The menu option text, or null.
+     * @param target The menu target text, or null.
+     */
+    private void postClickSent(MenuOption option, String action, String target) {
+        Point point = lastClickPoint;
+        if (eventBus == null || point == null) {
+            return;
+        }
+
+        eventBus.post(new KrakenClickSent(lastClickMillis, point.getX(), point.getY(), option,
+                action == null ? "" : action, target == null ? "" : target));
+    }
+
+    /**
+     * Stamps the client's mouse timestamps and sends the click packet carrying the delta between them.
+     * Runs on the client thread only.
+     *
+     * @param x The x canvas coordinate.
+     * @param y The y canvas coordinate.
+     */
+    @SneakyThrows
+    private void queueClickPacketOnClientThread(int x, int y) {
+        long mouseHandlerMS = System.currentTimeMillis();
+        setMouseHandlerLastMillis(mouseHandlerMS);
+        long clientMS = getClientLastMillis();
+        long deltaMs = mouseHandlerMS - clientMS;
+        setClientLastMillis(mouseHandlerMS);
+
+        if (deltaMs < 0) deltaMs = 0L;
+        if (deltaMs > 32767) deltaMs = 32767L;
+
+        // Last bit of the mouse time is expected to be 1 if it's a left click and 0 if it's a right. This shifts to make it always 1.
+        // Since this is only invoked on actual clicks to do something in the game its always going to be a left click.
+        int mouseInfo = ((int) deltaMs << 1);
+
+        packetSenderProvider.get().sendPacket(PacketFactory.getEventMouseClick(), mouseInfo, x, y, 0);
+        lastClickPoint = new Point(x, y);
+        lastClickMillis = mouseHandlerMS;
+
+        maybeResetIdleCounters();
+    }
+
+    /**
+     * Injects a synthetic keypress once the client's idle counters pass the current threshold, then
+     * re-randomises that threshold.
+     *
+     * <p>The compare-and-set makes the check-and-claim atomic, so concurrent callers produce exactly
+     * one keypress per crossing rather than one each.</p>
+     */
+    private void maybeResetIdleCounters() {
+        int idleClientTicks = client.getKeyboardIdleTicks();
+        if (client.getMouseIdleTicks() < idleClientTicks) {
+            idleClientTicks = client.getMouseIdleTicks();
+        }
+
+        // A timeout shortened through IdleTimeoutService can fall below the randomised threshold, so the reset also
+        // fires once 7/8 of the timeout has passed. At the client's default 15000-tick timeout that cap (13125) is
+        // above every randomised threshold.
+        long storedThreshold = idleResetThreshold.get();
+        long threshold = Math.min(storedThreshold, client.getIdleTimeout() * 7L / 8);
+        if (idleClientTicks < threshold) {
+            return;
+        }
+
+        if (!idleResetThreshold.compareAndSet(storedThreshold, RandomUtils.randomDelay())) {
+            return;
+        }
+
+        dispatchIdleResetKeyPress();
+    }
+
+    /**
+     * Dispatches the backspace key sequence that resets the client's keyboard idle counter.
+     *
+     * <p>Posted to the AWT event queue because {@code Component.dispatchEvent} runs the canvas
+     * listeners synchronously on the calling thread, and the event dispatch thread is where the client
+     * expects to receive input events. Going through {@link InputDispatch} marks the keypress as synthetic for
+     * input listeners.</p>
+     */
+    private void dispatchIdleResetKeyPress() {
+        InputDispatch.onEventThread(() -> {
+            KeyEvent keyPress = new KeyEvent(client.getCanvas(), KeyEvent.KEY_PRESSED, System.currentTimeMillis(), BUTTON1_DOWN_MASK, KeyEvent.VK_BACK_SPACE, (char) KeyEvent.VK_BACK_SPACE);
+            client.getCanvas().dispatchEvent(keyPress);
+            KeyEvent keyRelease = new KeyEvent(client.getCanvas(), KeyEvent.KEY_RELEASED, System.currentTimeMillis(), 0, KeyEvent.VK_BACK_SPACE, (char) KeyEvent.VK_BACK_SPACE);
+            client.getCanvas().dispatchEvent(keyRelease);
+            KeyEvent keyTyped = new KeyEvent(client.getCanvas(), KeyEvent.KEY_TYPED, System.currentTimeMillis(), 0, KeyEvent.VK_UNDEFINED, (char) KeyEvent.VK_UNDEFINED);
+            client.getCanvas().dispatchEvent(keyTyped);
+        });
+    }
+
+    @SneakyThrows
+    private long getClientLastMillis() {
+        return getClientMillisField().getLong(client) * HooksLoader.getReflectionHooks().getClientMillisMultiplier();
+    }
+
+    @SneakyThrows
+    private void setMouseHandlerLastMillis(long time) {
+        getMouseHandlerLastPressedField().setLong(null, time * mouseHandlerMultiplierInverse());
+    }
+
+    @SneakyThrows
+    private void setClientLastMillis(long time) {
+        getClientMillisField().setLong(client, time * clientMillisMultiplierInverse());
+    }
+
+    /**
+     * Returns the cached client millis {@link Field}, resolving it on first use. Only the field
+     * handle is cached — the timestamp is read from and written to the live client on every call.
+     * A failed resolution is not cached and is retried on the next call.
+     *
+     * @return The reflected field with its accessible flag set.
+     */
+    @SneakyThrows
+    private Field getClientMillisField() {
+        Field cached = clientMillisField;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (resolutionLock) {
+            if (clientMillisField == null) {
+                Field resolved = client.getClass().getDeclaredField(HooksLoader.getReflectionHooks().getClientMillisField());
+                resolved.setAccessible(true);
+                clientMillisField = resolved;
+            }
+            return clientMillisField;
+        }
+    }
+
+    /**
+     * Returns the cached mouse handler last-pressed {@link Field}, resolving it on first use.
+     * Only the field handle is cached — the timestamp is written through it on every call.
+     * A failed resolution is not cached and is retried on the next call.
+     *
+     * @return The reflected static field with its accessible flag set.
+     */
+    @SneakyThrows
+    private Field getMouseHandlerLastPressedField() {
+        Field cached = mouseHandlerLastPressedField;
+        if (cached != null) {
+            return cached;
+        }
+        synchronized (resolutionLock) {
+            if (mouseHandlerLastPressedField == null) {
+                Class<?> mouseHandler = client.getClass().getClassLoader().loadClass(HooksLoader.getReflectionHooks().getMouseHandlerLastPressedClass());
+                Field resolved = mouseHandler.getDeclaredField(HooksLoader.getReflectionHooks().getMouseHandlerLastPressedField());
+                resolved.setAccessible(true);
+                mouseHandlerLastPressedField = resolved;
+            }
+            return mouseHandlerLastPressedField;
+        }
+    }
+
+    /**
+     * Returns the modular inverse of the hooked client millis multiplier, computed once. The
+     * inverse is a pure function of the hook constant, so caching it cannot change the value.
+     *
+     * @return The modular inverse used to scramble timestamps written to the client field.
+     */
+    private long clientMillisMultiplierInverse() {
+        Long cached = clientMillisMultiplierInverse;
+        if (cached == null) {
+            cached = MathUtils.modInverse(HooksLoader.getReflectionHooks().getClientMillisMultiplier());
+            clientMillisMultiplierInverse = cached;
+        }
+        return cached;
+    }
+
+    /**
+     * Returns the modular inverse of the hooked mouse handler multiplier, computed once. The
+     * inverse is a pure function of the hook constant, so caching it cannot change the value.
+     *
+     * @return The modular inverse used to scramble timestamps written to the mouse handler field.
+     */
+    private long mouseHandlerMultiplierInverse() {
+        Long cached = mouseHandlerMultiplierInverse;
+        if (cached == null) {
+            cached = MathUtils.modInverse(HooksLoader.getReflectionHooks().getMouseHandlerMultiplier());
+            mouseHandlerMultiplierInverse = cached;
+        }
+        return cached;
+    }
+}

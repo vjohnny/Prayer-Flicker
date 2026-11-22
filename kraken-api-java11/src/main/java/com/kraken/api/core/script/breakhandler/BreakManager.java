@@ -1,0 +1,406 @@
+package com.kraken.api.core.script.breakhandler;
+
+import com.google.inject.Inject;
+import com.google.inject.Singleton;
+import com.kraken.api.Context;
+import com.kraken.api.core.KrakenThreads;
+import com.kraken.api.core.script.Script;
+import com.kraken.api.service.ui.login.LoginService;
+import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.Client;
+import net.runelite.api.GameState;
+import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
+import net.runelite.client.eventbus.EventBus;
+import net.runelite.client.eventbus.Subscribe;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Takes breaks for an attached script. The next break is scheduled from the profile's randomised run
+ * duration, and a break also starts when any of the profile's break conditions reports true. Breaks
+ * can log the player out, and the script resumes once the break has ended.
+ */
+@Slf4j
+@Singleton
+public class BreakManager {
+
+    @Inject
+    private Client client;
+
+    @Inject
+    private EventBus eventBus;
+
+    @Inject
+    private Context ctx;
+
+    @Inject
+    private LoginService loginService;
+
+    @Inject
+    private BreakState state;
+
+    private ScheduledExecutorService scheduler = KrakenThreads.newScheduler("break-manager");
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("hh:mm:ss a").withZone(ZoneId.systemDefault());
+
+    /*
+     * Every field below is owned by the client thread. Public entry points hop onto it, the event
+     * handlers already run on it, and the scheduled end-of-break callback re-enters through it, so no
+     * two threads ever mutate break state at once.
+     */
+    private Script activeScript;
+    private BreakProfile activeProfile;
+    private boolean initialized = false;
+    private boolean breakScheduled = false;
+    private ScheduledFuture<?> scheduledBreakEnd;
+
+    /**
+     * Incremented whenever a break is started or its scheduled end is cancelled. The end-of-break
+     * callback carries the value it was scheduled with and is ignored when it no longer matches, so a
+     * callback that was already running when the manager shut down or reset cannot resume a script.
+     */
+    private int generation;
+
+    /**
+     * Initializes the break handler and registers it to the event bus.
+     * Safe to call multiple times - will only initialize once. Runs on the client thread; when called
+     * from another thread the work is queued and this method returns immediately.
+     */
+    public void initialize() {
+        ctx.runOnClientThread((Runnable) () -> {
+            if (initialized) {
+                return;
+            }
+            // A scheduler shut down by a previous shutdown() cannot accept work again, so a
+            // re-initialised manager gets a fresh one.
+            if (scheduler.isShutdown()) {
+                scheduler = KrakenThreads.newScheduler("break-manager");
+            }
+            eventBus.register(this);
+            initialized = true;
+            log.info("Break Manager initialized");
+        });
+    }
+
+    /**
+     * Shuts down the break handler and cleans up resources. Runs on the client thread; when called
+     * from another thread the work is queued and this method returns immediately.
+     */
+    public void shutdown() {
+        ctx.runOnClientThread((Runnable) () -> {
+            if (!initialized) {
+                return;
+            }
+            eventBus.unregister(this);
+            cancelScheduledBreakEnd();
+            scheduler.shutdownNow();
+            initialized = false;
+            breakScheduled = false;
+            state.reset();
+            log.info("Break Manager shut down");
+        });
+    }
+
+    /**
+     * Attaches a script to the break handler with a specific profile.
+     * Prevents duplicate attachments and handles resuming from breaks. Runs on the client thread;
+     * when called from another thread the work is queued and this method returns immediately.
+     * @param script An instance of a class extending the Script class
+     * @param profile The break profile to use
+     */
+    public void attachScript(Script script, BreakProfile profile) {
+        ctx.runOnClientThread((Runnable) () -> attach(script, profile));
+    }
+
+    /**
+     * Detaches the current script from the break handler. Runs on the client thread; when called
+     * from another thread the work is queued and this method returns immediately.
+     */
+    public void detachScript() {
+        ctx.runOnClientThread((Runnable) this::detach);
+    }
+
+    /**
+     * Attaches a script on the client thread.
+     * @param script The script to attach
+     * @param profile The break profile to use
+     */
+    private void attach(Script script, BreakProfile profile) {
+        // If same script is already attached, don't re-attach (plugin restart scenario)
+        if (activeScript == script && activeProfile == profile) {
+            // If we were on break and logged back in, handle resume logic
+            if (state.shouldResumeAfterLogin()) {
+                log.info("Resuming script after break ended during logout");
+                completeBreakResume();
+            }
+            return;
+        }
+
+        if (activeScript != null && activeScript != script) {
+            log.warn("Detaching previous script before attaching new one");
+            detachScript();
+        }
+
+        this.activeScript = script;
+        this.activeProfile = profile;
+
+        // Only reset state if we're not currently managing a break
+        if (!state.isOnBreak() && !state.isAwaitingLogin()) {
+            cancelScheduledBreakEnd();
+            this.state.reset();
+        } else {
+            log.info("Reattached script while break is active or pending");
+        }
+
+        log.info("Attached script: {} with profile: {}", script.getClass().getName(), profile.getName());
+    }
+
+    /**
+     * Detaches the current script on the client thread.
+     */
+    private void detach() {
+        if (activeScript == null) {
+            return;
+        }
+
+        // Don't clear state if we're on break - preserve it for potential resume
+        if (!state.isOnBreak() && !state.isAwaitingLogin()) {
+            log.info("Script: {} detached", activeScript.getClass().getName());
+            this.activeScript = null;
+            this.activeProfile = null;
+            this.breakScheduled = false;
+            cancelScheduledBreakEnd();
+            this.state.reset();
+        } else {
+            log.info("Script: {} detached but break state preserved", activeScript.getClass().getName());
+            this.activeScript = null;
+        }
+    }
+
+    /**
+     * Schedules the next break based on the profile settings.
+     */
+    private void scheduleNextBreak() {
+        if (activeProfile == null) return;
+
+        Duration nextRunDuration = activeProfile.getNextRunDuration();
+        Instant nextBreakTime = Instant.now().plus(nextRunDuration);
+        state.setNextBreakTime(nextBreakTime);
+        breakScheduled = true;
+
+        String formattedTime = TIME_FORMATTER.format(nextBreakTime);
+        log.info("Next break scheduled in {} minutes at: {}", nextRunDuration.toMinutes(), formattedTime);
+    }
+
+
+    /**
+     * Advances the break schedule on each game tick. Schedules the first break once the player is logged in,
+     * then starts a break when the scheduled time has passed or a break condition is met. Does nothing while
+     * a break is active or no script is attached.
+     * @param event The game tick event.
+     */
+    @Subscribe
+    public void onGameTick(GameTick event) {
+        if (!initialized || activeScript == null || activeProfile == null) return;
+
+        // If we haven't scheduled the first break yet and we're logged in and not on break, schedule it now
+        if (!breakScheduled && !state.isOnBreak() && !state.isAwaitingLogin() &&
+                client.getGameState() == GameState.LOGGED_IN) {
+            log.info("Player logged in, starting break schedule");
+            state.setScriptStartTime(Instant.now());
+            scheduleNextBreak();
+            return;
+        }
+
+        // Don't check conditions while on break
+        if (state.isOnBreak() || state.isAwaitingLogin()) return;
+
+        if (state.getNextBreakTime() != null && Instant.now().isAfter(state.getNextBreakTime())) {
+            startBreak("Scheduled break time reached");
+            return;
+        }
+
+        // Check custom conditions
+        for (BreakCondition condition : activeProfile.getBreakConditions()) {
+            if (condition.shouldBreak()) {
+                startBreak(condition.getDescription());
+                return;
+            }
+        }
+    }
+
+    /**
+     * Resumes the script when the player logs back in after a break that has already ended. If the break is still
+     * active, the player stays logged in and the script remains paused.
+     * @param event The game state change event.
+     */
+    @Subscribe
+    public void onGameStateChanged(GameStateChanged event) {
+        if (!initialized) return;
+
+        if (event.getGameState() == GameState.LOGGED_IN) {
+            if (state.isAwaitingLogin()) {
+                if (state.shouldResumeAfterLogin()) {
+                    log.info("Break period ended while logged out, resuming script");
+                    completeBreakResume();
+                } else {
+                    log.info("Break still active, remaining logged in but paused");
+                }
+            }
+        }
+    }
+
+    /**
+     * Initiates a break by pausing the script and optionally logging out.
+     * Returns false if break couldn't be started (e.g., logout failed when required).
+     */
+    private boolean startBreak(String reason) {
+        if (activeScript == null) return false;
+        log.info("Attempting to start break: {}", reason);
+
+        // If logout is required, try it first before committing to the break
+        if (activeProfile.isLogoutDuringBreak()) {
+            if (client.getGameState() == GameState.LOGGED_IN) {
+                try {
+                    boolean loggedOut = ctx.players().local().logout();
+                    if (!loggedOut) {
+                        log.error("Failed to logout for break - aborting break attempt");
+                        return false;
+                    }
+                } catch (Exception e) {
+                    log.error("Exception during logout for break - aborting break", e);
+                    return false;
+                }
+            } else {
+                log.warn("Not logged in, cannot logout for break - aborting break attempt");
+                return false;
+            }
+        }
+
+        state.setOnBreak(true);
+        state.setBreakStartTime(Instant.now());
+        state.setBreakReason(reason);
+
+        activeScript.pause();
+
+        Duration breakDuration = activeProfile.getNextBreakDuration();
+        Instant breakEndTime = Instant.now().plus(breakDuration);
+        state.setBreakEndTime(breakEndTime);
+
+        if (activeProfile.isLogoutDuringBreak()) {
+            state.setAwaitingLogin(true);
+            log.info("Break started with logout - will resume after login at: {}", TIME_FORMATTER.format(breakEndTime));
+        }
+
+        int expected = ++generation;
+        scheduledBreakEnd = scheduler.schedule(() -> ctx.runOnClientThread((Runnable) () -> endBreak(expected)),
+                breakDuration.toMillis(), TimeUnit.MILLISECONDS);
+        String formattedTime = TIME_FORMATTER.format(breakEndTime);
+        log.info("Break will end in {} minutes at: {}", breakDuration.toMinutes(), formattedTime);
+        return true;
+    }
+
+    /**
+     * Invalidates any scheduled end-of-break callback, whether or not it has already started running.
+     */
+    private void cancelScheduledBreakEnd() {
+        generation++;
+        if (scheduledBreakEnd != null) {
+            scheduledBreakEnd.cancel(false);
+            scheduledBreakEnd = null;
+        }
+    }
+
+    /**
+     * Ends the current break and resumes the script (if logged in). Runs on the client thread.
+     * @param expected The generation the break was scheduled under; a mismatch means the break was
+     *                 cancelled or replaced after this callback was scheduled and it must do nothing.
+     */
+    private void endBreak(int expected) {
+        if (expected != generation || !state.isOnBreak()) return;
+        log.info("Break period ended");
+
+        if (state.isAwaitingLogin() && client.getGameState() != GameState.LOGGED_IN) {
+            try {
+                loginService.login();
+                log.info("Attempting to log back in after break");
+                // Don't call completeBreakResume here - let game state change event handle it
+            } catch (Exception e) {
+                log.error("Failed to login after break", e);
+            }
+        } else if (client.getGameState() == GameState.LOGGED_IN) {
+            // If we're already logged in, complete the resume immediately
+            completeBreakResume();
+        }
+    }
+
+    /**
+     * Completes the break resume process - resuming script and scheduling next break.
+     * Should only be called once per break resume.
+     */
+    private void completeBreakResume() {
+        // Guard against duplicate calls
+        if (!state.isOnBreak() && !state.isAwaitingLogin()) {
+            log.info("Resume already completed, ignoring duplicate call");
+            return;
+        }
+
+        if (activeScript == null) {
+            log.warn("Cannot resume break - no active script");
+            state.setOnBreak(false);
+            state.setAwaitingLogin(false);
+            return;
+        }
+
+        // Make sure we're logged in before resuming
+        if (client.getGameState() != GameState.LOGGED_IN) {
+            log.warn("Cannot complete resume - not logged in");
+            return;
+        }
+
+        log.info("Completing break resume");
+
+        state.setOnBreak(false);
+        state.setAwaitingLogin(false);
+        state.setBreakStartTime(null);
+        state.setBreakEndTime(null);
+
+        activeScript.resume();
+        log.info("Script resumed after break");
+
+        scheduleNextBreak();
+    }
+
+    /**
+     * Manually triggers a break. Safe to call from a script loop or any other thread; the break is
+     * started on the client thread and this call waits for the result.
+     * @param reason The reason for why the break is being taken (this shows up in the logs).
+     * @return True when a break was triggered successfully and false otherwise.
+     */
+    public boolean triggerBreak(String reason) {
+        return ctx.runOnClientThread(() -> activeScript != null && !state.isOnBreak() && startBreak(reason), false);
+    }
+
+    /**
+     * Checks if the handler is currently managing a script.
+     * @return True if there is an active script attached and false otherwise
+     */
+    public boolean isActive() {
+        return activeScript != null;
+    }
+
+    /**
+     * Checks if currently on break.
+     * @return True if a break is currently being taken and false otherwise.
+     */
+    public boolean isOnBreak() {
+        return state.isOnBreak();
+    }
+}

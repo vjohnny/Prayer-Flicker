@@ -1,0 +1,163 @@
+package plugins.api.tests;
+
+import com.google.inject.Inject;
+import com.kraken.api.Context;
+import lombok.extern.slf4j.Slf4j;
+import plugins.api.ApiTestConfig;
+import plugins.api.requirements.TestRequirements;
+
+@Slf4j
+public abstract class BaseApiTest {
+
+    @Inject
+    protected ApiTestConfig config;
+
+    @Inject
+    private Context ctx;
+
+    /**
+     * Runs the full lifecycle on the <em>calling</em> thread: {@link #onStart()},
+     * {@link #runTest(Context)}, then {@link #onFinish()}.
+     *
+     * <p>The caller must not be the client thread — test bodies block on {@code SleepService}, which
+     * no-ops there. Running on the caller's thread rather than a pool is what makes a run genuinely
+     * interruptible: {@code SleepService} checks {@code Thread.isInterrupted()} in every wait loop, so
+     * interrupting the worker aborts the test promptly, which {@code CompletableFuture.cancel} could
+     * never do.</p>
+     *
+     * @return true if the test passed
+     * @throws InterruptedException if the thread was interrupted, i.e. the run was cancelled
+     * @throws Exception if the test body or its lifecycle hooks threw
+     */
+    public boolean runSynchronously() throws Exception {
+        try {
+            log.info("Starting {} test...", getTestName());
+            onStart();
+            boolean result = runTest(ctx);
+            log.info("{} test completed with result: {}", getTestName(), result ? "PASSED" : "FAILED");
+            return result;
+        } finally {
+            try {
+                onFinish();
+            } catch (Exception e) {
+                // Teardown problems must not mask the real outcome, so they are logged and swallowed.
+                log.error("Error during test teardown for {}", getTestName(), e);
+            }
+        }
+    }
+
+    /**
+     * Declares the world state this test needs before {@link #runTest(Context)} is called.
+     *
+     * <p>Overriding this lets the runner establish the state itself — travelling, banking, withdrawing
+     * — and report an unmeetable requirement as a skip with a reason rather than as a failure. A test
+     * that does not override it keeps whatever setup it performs inline, so migration is per test and
+     * nothing changes until a test opts in.</p>
+     *
+     * <p>Implementations must be pure. This is called off the client thread, possibly before login,
+     * and the result is cached, so it must not read game state.</p>
+     *
+     * @return the declared preconditions; {@link TestRequirements#NONE} when none are declared
+     */
+    public TestRequirements requirements() {
+        return TestRequirements.builder().build();
+    }
+
+    /**
+     * The actual test implementation - should be overridden by concrete test classes
+     * @return true if test passed, false if failed
+     */
+    protected abstract boolean runTest(Context ctx) throws Exception;
+
+    /**
+     * Returns the name of this test, used for logging and as its display name in the registry.
+     * @return test name
+     */
+    public abstract String getTestName();
+
+    /**
+     * Called before the test runs. Override this to perform setup.
+     */
+    protected void onStart() throws Exception {}
+
+    /**
+     * Called after the test runs. Override this to perform cleanup.
+     */
+    protected void onFinish() throws Exception {}
+
+    /**
+     * Helper method to perform assertion-style checks
+     * @param condition the condition to check
+     * @param message the message to log if condition fails
+     * @return the condition result
+     */
+    protected boolean assertThat(boolean condition, String message) {
+        if (!condition) {
+            log.error("Test assertion failed: {}", message);
+        } else if (config.showDebugInfo()) {
+            log.debug("Test assertion passed: {}", message);
+        }
+        return condition;
+    }
+
+    /**
+     * Verifies that a given condition is {@literal true}. If the condition evaluates to {@literal false}, logs
+     * an error with the specified message and returns {@literal false}.
+     *
+     * <p>This method serves as a helper for performing assertion-like checks in test scenarios.</p>
+     *
+     * @param condition the boolean condition to evaluate. If {@literal true}, the method returns {@literal true}.
+     *                  If {@literal false}, an error message is logged.
+     * @param message the message to be logged when the condition evaluates to {@literal false}.
+     * @return {@literal true} if the condition is met, {@literal false} otherwise.
+     */
+    protected boolean assertTrue(boolean condition, String message) {
+        if(condition) {
+            return true;
+        }
+
+        log.error("Test assertion failed: {}", message);
+        return false;
+    }
+
+    /**
+     * Verifies that the provided value is {@literal null}. If the value is not {@literal null}, logs
+     * an error with the specified message and returns {@literal false}.
+     *
+     * <p>This method serves as a helper for assertion-like checks in test scenarios to ensure
+     * that a value is {@literal null} when expected.</p>
+     *
+     * @param value the value to check for {@literal null}. If the value is {@literal null}, the method
+     *              returns {@literal true}. If it is not, an error message is logged.
+     * @param message the message to log in the event the assertion fails (i.e., if the value is not
+     *                {@literal null}).
+     *
+     * @return {@literal true} if the value is {@literal null}, {@literal false} otherwise.
+     */
+    protected boolean assertNull(Object value, String message) {
+        return assertThat(value == null, message + " (was null)");
+    }
+
+    /**
+     * Helper method to check if a value is not null
+     * @param value the value to check
+     * @param message the message to log if value is null
+     * @return true if value is not null
+     */
+    protected boolean assertNotNull(Object value, String message) {
+        return assertThat(value != null, message + " (was null)");
+    }
+
+    /**
+     * Helper method to check if two values are equal
+     * @param expected the expected value
+     * @param actual the actual value
+     * @param message the message to log if values don't match
+     * @return true if values are equal
+     */
+    protected boolean assertEquals(Object expected, Object actual, String message) {
+        boolean equal = (expected == null && actual == null) ||
+                (expected != null && expected.equals(actual));
+        return assertThat(equal, message + " (expected: " + expected + ", actual: " + actual + ")");
+    }
+}

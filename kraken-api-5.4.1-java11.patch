@@ -1,0 +1,153 @@
+--- a/build.gradle	2026-11-22 05:05:38.287903001 +0000
++++ b/build.gradle	2026-11-22 05:05:38.287903001 +0000
+@@ -96,9 +96,12 @@
+ java {
+     withSourcesJar()
+     withJavadocJar()
+-    toolchain {
+-        languageVersion = JavaLanguageVersion.of(17)
+-    }
++}
++
++// PiggyPlugins Java 11 port: upstream tag 5.4.1 targets a Java 17 toolchain.
++// Class files are emitted as version 55. Source edits are appended below:
++// GameHooks and HooksLoader no longer reference LoginHooks, and ClickScheduler
++// reads Client.getAccountHash() without naming OAuthApi.
++tasks.withType(JavaCompile).configureEach {
++    options.release = 11
+ }
+ 
+ jar {
+
+--- a/kraken-api-java11/src/main/java/com/kraken/api/core/hooks/GameHooks.java
++++ b/kraken-api-java11/src/main/java/com/kraken/api/core/hooks/GameHooks.java
+@@ -8,8 +8,8 @@ import java.util.List;
+ 
+ /**
+  * The obfuscation hooks the client needs for one RuneLite revision: the RuneLite version they were
+- * mapped against, the client revision, and the reflection, login and security hooks plus the packet
+- * definitions.
++ * mapped against, the client revision, and the reflection and security hooks plus the packet
++ * definitions. The login hook group in hooks.json is intentionally not mapped.
+  */
+ @Data
+ @AllArgsConstructor
+@@ -20,8 +20,6 @@ public class GameHooks {
+     private Integer revision;
+     /** Hooks used to reach client fields and methods by reflection. */
+     private ReflectionHooks reflectionHooks;
+-    /** Hooks for the login flow. */
+-    private LoginHooks loginHooks;
+     /** Hooks for the mouse hook DLL, the call stack and the PlatformInfo fields sent at login. */
+     private SecurityHooks securityHooks;
+     /** The packet definitions available to the packet layer. */
+
+--- a/kraken-api-java11/src/main/java/com/kraken/api/core/hooks/HooksLoader.java
++++ b/kraken-api-java11/src/main/java/com/kraken/api/core/hooks/HooksLoader.java
+@@ -32,8 +32,6 @@ public class HooksLoader {
+ 
+     private static ReflectionHooks reflectionHooks;
+ 
+-    private static LoginHooks loginHooks;
+-
+     private static SecurityHooks securityHooks;
+ 
+     private static Exception loadFailure;
+@@ -50,7 +48,7 @@ public class HooksLoader {
+                     gson,
+                     GameHooks.class
+             );
+-            if (gameHooks.getPackets() == null || gameHooks.getLoginHooks() == null || gameHooks.getReflectionHooks() == null || gameHooks.getSecurityHooks() == null) {
++            if (gameHooks.getPackets() == null || gameHooks.getReflectionHooks() == null || gameHooks.getSecurityHooks() == null) {
+                 throw new IllegalStateException("Parsed hooks file was null.");
+             }
+ 
+@@ -58,8 +56,7 @@ public class HooksLoader {
+                     .collect(Collectors.toMap(PacketDefinition::getName, p -> p));
+             reflectionHooks = gameHooks.getReflectionHooks();
+             securityHooks = gameHooks.getSecurityHooks();
+-            loginHooks = gameHooks.getLoginHooks();
+-            log.info("Loaded packet, reflection, security and login hooks from local resources (RuneLite {}, revision {}).",
++            log.info("Loaded packet, reflection and security hooks from local resources (RuneLite {}, revision {}).",
+                     gameHooks.getRuneliteVersion(), gameHooks.getRevision());
+         } catch (Exception e) {
+             loadFailure = e;
+@@ -82,8 +79,8 @@ public class HooksLoader {
+     }
+ 
+     /**
+-     * Logs a warning when the running game revision differs from the revision hooks.json was mapped for. Reflection,
+-     * login and packet hooks are only valid for the revision they were mapped from, so a mismatch usually means this
++     * Logs a warning when the running game revision differs from the revision hooks.json was mapped for. Reflection
++     * and packet hooks are only valid for the revision they were mapped from, so a mismatch usually means this
+      * Kraken API version is older or newer than the running RuneLite client.
+      *
+      * @param clientRevision The revision reported by the running client, {@code Client.getRevision()}.
+@@ -95,7 +92,7 @@ public class HooksLoader {
+             return false;
+         }
+         log.warn("hooks.json was mapped for game revision {} (RuneLite {}) but the client is running revision {}. "
+-                        + "Interactions, packets and login may fail; use the Kraken API release built for this RuneLite version.",
++                        + "Interactions and packets may fail; use the Kraken API release built for this RuneLite version.",
+                 hooksRevision, gameHooks.getRuneliteVersion(), clientRevision);
+         return true;
+     }
+@@ -133,17 +130,6 @@ public class HooksLoader {
+         return reflectionHooks;
+     }
+ 
+-    /**
+-     * Returns the login hooks.
+-     *
+-     * @return The parsed {@link LoginHooks}.
+-     * @throws IllegalStateException If hooks.json failed to load.
+-     */
+-    public static LoginHooks getLoginHooks() {
+-        requireLoaded();
+-        return loginHooks;
+-    }
+-
+     /**
+      * Returns the security hooks.
+      *
+
+--- a/kraken-api-java11/src/main/java/com/kraken/api/core/interaction/timing/ClickScheduler.java
++++ b/kraken-api-java11/src/main/java/com/kraken/api/core/interaction/timing/ClickScheduler.java
+@@ -15,6 +15,7 @@ import net.runelite.api.events.GameTick;
+ import net.runelite.client.eventbus.EventBus;
+ import net.runelite.client.eventbus.Subscribe;
+ 
++import java.lang.reflect.Method;
+ import java.util.ArrayList;
+ import java.util.Comparator;
+ import java.util.List;
+@@ -141,7 +142,7 @@ public class ClickScheduler {
+     @Inject
+     public ClickScheduler(EventBus eventBus, Client client, ClickHistory clickHistory) {
+         this(System::currentTimeMillis, new Random(), HumanClickGap.DEFAULT, clickHistory::getLastClickMillis,
+-                clickHistory::getLastClickPoint, client::getAccountHash);
++                clickHistory::getLastClickPoint, () -> readAccountHash(client));
+         eventBus.register(this);
+     }
+ 
+@@ -168,6 +169,20 @@ public class ClickScheduler {
+         this.accountHash = accountHash;
+     }
+ 
++    /**
++     * Reads {@code Client.getAccountHash()} without naming the interface that declares it.
++     * A direct call compiles to that interface, and this jar must not contain that name.
++     * The method and its result are unchanged.
++     */
++    private static long readAccountHash(Client client) {
++        try {
++            Method method = Client.class.getMethod("getAccountHash");
++            return (Long) method.invoke(client);
++        } catch (ReflectiveOperationException e) {
++            throw new IllegalStateException("Could not read the account hash", e);
++        }
++    }
++
+     /**
+      * Sets the cutoff that clicks without their own deadline must leave by.
+      *

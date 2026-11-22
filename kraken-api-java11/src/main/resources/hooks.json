@@ -1,0 +1,385 @@
+{
+  "runeliteVersion": "1.13.7",
+  "revision": 242,
+  "reflectionHooks": {
+    "isaacCipherFieldName": "ag",
+    "addNodeMethodName": "ai",
+    "addNodeClassName": "client",
+    "addNodeGarbageValue": -114,
+    "clientPacketClassName": "jc",
+    "clientPacketLengthField": "ex",
+    "clientPacketLengthMultiplier": 600715315,
+    "packetWriterClassName": "cc",
+    "packetWriterFieldName": "aq",
+    "classContainingPacketBufferNodeName": "ll",
+    "packetBufferNodeFactoryMethodName": "ax",
+    "bufferClassName": "yo",
+    "extendedBufferClassName": "yh",
+    "offsetMultiplier": 1172184269,
+    "indexMultiplier": -2108739579,
+    "bufferOffsetField": "aa",
+    "bufferArrayField": "aj",
+    "mouseHandlerLastPressedClass": "uy",
+    "mouseHandlerLastPressedField": "ay",
+    "mouseHandlerMultiplier": -7938753916163931075,
+    "clientMillisField": "gk",
+    "clientMillisMultiplier": -8363476876472191113,
+    "idleTimeoutField": "ld",
+    "packetBufferNodeClassName": "jy",
+    "packetBufferFieldName": "ad",
+    "packetBufferNodeGarbageValue": 2014705571,
+    "doActionClassName": "az",
+    "doActionMethodName": "ei",
+    "doActionGarbageValue": 103
+  },
+  "loginHooks": {
+    "loginIndexGarbageValue": 0,
+    "loginIndexMethodName": "bj",
+    "loginIndexClassName": "ex",
+    "sessionClassName": "client",
+    "sessionMethodName": "vv",
+    "accountIdClassName": "client",
+    "accountIdMethodName": "yp",
+    "accessTokenClassName": "client",
+    "accessTokenMethodName": "ls",
+    "refreshTokenClassName": "client",
+    "refreshTokenMethodName": "ki",
+    "credentialLookupClassName": "client",
+    "credentialLookupMethodName": "fq",
+    "displayNameFieldName": "dg",
+    "displayNameClassName": "ak",
+    "accountCheckFieldName": "cc",
+    "accountCheckClassName": "client",
+    "jagexValueFieldName": "ao",
+    "jagexValueClassName": "abz",
+    "legacyValueFieldName": "ax",
+    "legacyValueClassName": "abz"
+  },
+  "securityHooks": {
+    "mouseHookDllClassName": "client",
+    "mouseHookDllMethodName": "afj",
+    "clientLogFieldName": "bs",
+    "cleanCallStackValue": "client25882yu\nclient63027op\nnrc.RuneLite302start\nnrc.RuneLite279main\nnrl.ReflectionLa+64lambda$launc+\njl.ThreadUnknown +",
+    "platformInfoClassName": "ws",
+    "platformInfoMethodName": "ax",
+    "isPlatformInfoMethodStatic": false,
+    "platformInfoMethodArgCount": 2,
+    "platformInfoFields": [
+      {
+        "name": "OsType",
+        "fieldName": "bt",
+        "multiplier": -1747253607
+      },
+      {
+        "name": "Is64Bit",
+        "fieldName": "by"
+      },
+      {
+        "name": "OsVersion",
+        "fieldName": "bh",
+        "multiplier": 158450469
+      },
+      {
+        "name": "JavaVendor",
+        "fieldName": "bx",
+        "multiplier": -1653656741
+      },
+      {
+        "name": "JavaMajor",
+        "fieldName": "bg",
+        "multiplier": 1332055579
+      },
+      {
+        "name": "JavaMinor",
+        "fieldName": "bc",
+        "multiplier": 772235539
+      },
+      {
+        "name": "JavaPatch",
+        "fieldName": "bk",
+        "multiplier": -382218097
+      },
+      {
+        "name": "IsApplet",
+        "fieldName": "ba"
+      },
+      {
+        "name": "MaxMemoryMB",
+        "fieldName": "be",
+        "multiplier": -1963803691
+      },
+      {
+        "name": "AvailableProcessors",
+        "fieldName": "bs",
+        "multiplier": 1795177931
+      },
+      {
+        "name": "SystemMemory",
+        "fieldName": "bz",
+        "multiplier": 1375743453
+      },
+      {
+        "name": "SystemSpeed",
+        "fieldName": "cj",
+        "multiplier": -1672739009
+      },
+      {
+        "name": "GpuDxName",
+        "fieldName": "cm"
+      },
+      {
+        "name": "GpuGlName",
+        "fieldName": "cn"
+      },
+      {
+        "name": "GpuDxVersion",
+        "fieldName": "cw"
+      },
+      {
+        "name": "GpuGlVersion",
+        "fieldName": "cu"
+      },
+      {
+        "name": "GpuDriverMonth",
+        "fieldName": "cy",
+        "multiplier": -39149671
+      },
+      {
+        "name": "GpuDriverYear",
+        "fieldName": "cz",
+        "multiplier": 180672821
+      },
+      {
+        "name": "CpuManufacturer",
+        "fieldName": "ch"
+      },
+      {
+        "name": "CpuBrand",
+        "fieldName": "cv"
+      },
+      {
+        "name": "CpuCount1",
+        "fieldName": "cp",
+        "multiplier": -1162880077
+      },
+      {
+        "name": "CpuCount2",
+        "fieldName": "cs",
+        "multiplier": -989059287
+      },
+      {
+        "name": "CpuFeatures",
+        "fieldName": "cd"
+      },
+      {
+        "name": "CpuSignature",
+        "fieldName": "ci",
+        "multiplier": 1268712475
+      },
+      {
+        "name": "ClientName",
+        "fieldName": "cr"
+      },
+      {
+        "name": "DeviceName",
+        "fieldName": "cg"
+      }
+    ]
+  },
+  "packets": [
+    {
+      "name": "EVENT_APPLET_FOCUS",
+      "obfuscatedName": "dc",
+      "writes": [
+        {
+          "param": "hasFocus",
+          "methodName": "mi",
+          "operations": [
+            {
+              "type": "RAW"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "EVENT_MOUSE_CLICK",
+      "obfuscatedName": "cl",
+      "writes": [
+        {
+          "param": "0",
+          "methodName": "dd",
+          "operations": [
+            {
+              "type": "SUBTRACT",
+              "operand": 0
+            }
+          ]
+        },
+        {
+          "param": "mouseInfo",
+          "methodName": "ex",
+          "operations": [
+            {
+              "type": "ADD",
+              "operand": 128
+            },
+            {
+              "type": "RIGHT_SHIFT",
+              "operand": 8
+            }
+          ]
+        },
+        {
+          "param": "mouseY",
+          "methodName": "ee",
+          "operations": [
+            {
+              "type": "RAW"
+            },
+            {
+              "type": "RIGHT_SHIFT",
+              "operand": 8
+            }
+          ]
+        },
+        {
+          "param": "mouseX",
+          "methodName": "ex",
+          "operations": [
+            {
+              "type": "ADD",
+              "operand": 128
+            },
+            {
+              "type": "RIGHT_SHIFT",
+              "operand": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "MOVE_GAMECLICK",
+      "obfuscatedName": "cw",
+      "writes": [
+        {
+          "param": "5",
+          "methodName": "mi",
+          "operations": [
+            {
+              "type": "RAW"
+            }
+          ]
+        },
+        {
+          "param": "ctrlDown",
+          "methodName": "dd",
+          "operations": [
+            {
+              "type": "SUBTRACT",
+              "operand": 0
+            }
+          ]
+        },
+        {
+          "param": "worldPointX",
+          "methodName": "bc",
+          "operations": [
+            {
+              "type": "RIGHT_SHIFT",
+              "operand": 8
+            },
+            {
+              "type": "RAW"
+            }
+          ]
+        },
+        {
+          "param": "worldPointY",
+          "methodName": "wt",
+          "operations": [
+            {
+              "type": "RIGHT_SHIFT",
+              "operand": 8
+            },
+            {
+              "type": "ADD",
+              "operand": 128
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "RESUME_COUNTDIALOG",
+      "obfuscatedName": "bn",
+      "writes": [
+        {
+          "param": "var0",
+          "methodName": "ba",
+          "operations": [
+            {
+              "type": "RIGHT_SHIFT",
+              "operand": 24
+            },
+            {
+              "type": "RIGHT_SHIFT",
+              "operand": 16
+            },
+            {
+              "type": "RIGHT_SHIFT",
+              "operand": 8
+            },
+            {
+              "type": "RAW"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "RESUME_STRINGDIALOG",
+      "obfuscatedName": "bq",
+      "writes": [
+        {
+          "param": "length",
+          "methodName": "mi",
+          "operations": [
+            {
+              "type": "RAW"
+            }
+          ]
+        },
+        {
+          "param": "string",
+          "methodName": "cm",
+          "operations": [
+            {
+              "type": "STRING_CP1252_NULL_TERMINATED"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "RESUME_OBJDIALOG",
+      "obfuscatedName": "cf",
+      "writes": [
+        {
+          "param": "var0",
+          "methodName": "bc",
+          "operations": [
+            {
+              "type": "RIGHT_SHIFT",
+              "operand": 8
+            },
+            {
+              "type": "RAW"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
