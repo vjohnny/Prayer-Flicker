@@ -2,14 +2,13 @@ plugins {
     id 'java-library'
 }
 
-// Compiles unmodified Kraken API 5.4.1 sources (this directory's src/main) to
-// class file version 55. See ../kraken-api-5.4.1-java11.patch for the same
-// change against the upstream build.gradle. Java sources are not edited.
+// Compiles Kraken API 5.5.1 sources (this directory's src/main) to class file
+// version 55. See ../kraken-api-5.5.1-java11.patch. Login and break-handler
+// sources are excluded below; GameHooks, HooksLoader, and ClickScheduler are edited.
 
 repositories {
     mavenCentral()
     maven { url = 'https://repo.runelite.net' }
-    maven { url = 'https://jitpack.io' }
 }
 
 dependencies {
@@ -17,18 +16,14 @@ dependencies {
     compileOnly 'com.google.code.gson:gson:2.8.5'
     compileOnly 'com.google.guava:guava:31.1-jre'
     compileOnly 'com.google.inject:guice:4.2.2'
-    compileOnly 'net.runelite:client:1.13.7'
+    compileOnly 'net.runelite:client:1.13.8'
     compileOnly 'org.projectlombok:lombok:1.18.30'
     annotationProcessor 'org.projectlombok:lombok:1.18.30'
-
-    // Compile-only. The prayer-flicker sideload jar does not package shortestpath,
-    // which ships its own @PluginDescriptor.
-    compileOnly 'com.github.Kraken-Plugins:shortest-path:11d64616eb'
 }
 
 // Not compiled and not shipped. LoginService reads credentials.properties, and the
 // break-handler package exists to call it. LoginHooks is only used by that code.
-// The sources stay in this tree; see ../kraken-api-5.4.1-java11.patch.
+// The sources stay in this tree; see ../kraken-api-5.5.1-java11.patch.
 sourceSets.main.java.exclude 'com/kraken/api/service/ui/login/**'
 sourceSets.main.java.exclude 'com/kraken/api/core/script/breakhandler/**'
 sourceSets.main.java.exclude 'com/kraken/api/core/hooks/LoginHooks.java'
@@ -40,6 +35,6 @@ tasks.withType(JavaCompile).configureEach {
 
 jar {
     archiveBaseName = 'kraken-api'
-    archiveVersion = '5.4.1'
+    archiveVersion = '5.5.1'
     archiveClassifier = 'java11'
 }

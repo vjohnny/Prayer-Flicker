@@ -1,21 +1,22 @@
-VJPrayerFlicker-java17.jar
+VJPrayerFlicker-v2-java17.jar
 
-This jar bundles the Kraken Prayer Flicker plugin with Kraken API 5.4.1 so it can be
+This jar bundles the Kraken Prayer Flicker plugin with Kraken API 5.5.1 so it can be
 sideloaded in vanilla RuneLite. Kraken API is loaded from its own hooks.json resource.
 No hook names were rewritten.
 
 Modifications (GNU GPL v3, section 5): the login package, the login hook class,
 and the break-handler package are not included. They read the RuneLite credentials
 file or exist only to call that code. GameHooks, HooksLoader, and ClickScheduler in
-this jar are the Java 11 builds from KrakenPrayerFlicker/kraken-api-java11, which
-drop those references. See kraken-api-5.4.1-java11.patch. hooks.json is unmodified.
+this jar are the Java 11 builds from kraken-api-java11, which
+drop those references. See kraken-api-5.5.1-java11.patch. hooks.json is the unmodified
+5.5.1 resource, mapped for RuneLite 1.13.8 revision 243.
 
-Kraken API 5.4.1
+Kraken API 5.5.1
 Copyright the Kraken API authors
-https://github.com/Kraken-Plugins/kraken-api/tree/5.4.1
+https://github.com/Kraken-Plugins/kraken-api/tree/5.5.1
 License: GNU General Public License v3.0 (see kraken-api-GPL-3.0.txt).
-The published Maven POM also says MIT; the source repository LICENSE at tag 5.4.1 is GPL-3.0.
-Corresponding source: https://github.com/Kraken-Plugins/kraken-api/archive/refs/tags/5.4.1.tar.gz
+The published Maven POM also says MIT; the source repository LICENSE at tag 5.5.1 is GPL-3.0.
+Corresponding source: https://github.com/Kraken-Plugins/kraken-api/archive/refs/tags/5.5.1.tar.gz
 
 PiggyPlugins Kraken Prayer Flicker
 Original quick-prayer behavior by Ethan Vann, maintained by Piggy Plugins.

@@ -3,7 +3,9 @@ plugins {
     id 'com.krakenplugins.plugin' version '0.1.1'
 }
 
-// ./gradlew and ./gradlew shadedJarJava11 both write build/libs/VJPrayerFlicker.jar
+// ./gradlew and ./gradlew shadedJarJava11 both write build/libs/VJPrayerFlicker-v<version>.jar
+version = '2'
+def pluginVersion = version
 defaultTasks 'shadedJarJava11'
 
 // Standalone from the Java 11 PiggyPlugins build. The Kraken client provides
@@ -25,13 +27,13 @@ configurations {
 
 dependencies {
     compileOnly 'net.runelite:client:latest.release'
-    compileOnly 'com.github.kraken:kraken-api:5.4.1'
+    compileOnly 'com.github.kraken:kraken-api:5.5.1'
     compileOnly 'org.projectlombok:lombok:1.18.36'
     annotationProcessor 'org.projectlombok:lombok:1.18.36'
 
     // Same API jar, unpacked into the vanilla sideload jar. Not transitive:
     // RuneLite already provides Guice, Gson, Guava, SLF4J and Logback.
-    krakenBundle('com.github.kraken:kraken-api:5.4.1') {
+    krakenBundle('com.github.kraken:kraken-api:5.5.1') {
         transitive = false
     }
 }
@@ -42,7 +44,7 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 jar {
-    archiveFileName = 'VJPrayerFlicker-kraken-client.jar'
+    archiveFileName = "VJPrayerFlicker-v${pluginVersion}-kraken-client.jar"
 }
 
 // Vanilla RuneLite sideload of the published Java 17 kraken-api binary.
@@ -52,7 +54,7 @@ tasks.register('shadedJar', Jar) {
     group = 'build'
     description = 'Bundle kraken-api for ~/.runelite/sideloaded-plugins'
     dependsOn tasks.named('classes')
-    archiveFileName = 'VJPrayerFlicker-java17.jar'
+    archiveFileName = "VJPrayerFlicker-v${pluginVersion}-java17.jar"
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     // Published HooksLoader and GameHooks name LoginHooks, and ClickScheduler names
     // the Jagex account-hash interface. The Java 11 compile of those three classes
@@ -83,7 +85,7 @@ tasks.register('shadedJar', Jar) {
     exclude 'META-INF/*.RSA'
     manifest {
         attributes(
-                'Kraken-API': '5.4.1',
+                'Kraken-API': '5.5.1',
                 'Automatic-Module-Name': 'com.piggyplugins.krakenprayerflicker'
         )
     }
@@ -110,23 +112,11 @@ tasks.register('shadedJarJava11', Jar) {
     group = 'build'
     description = 'Java 11 sideload jar for ~/.runelite/sideloaded-plugins'
     dependsOn tasks.named('compileJava11')
-    archiveFileName = 'VJPrayerFlicker.jar'
+    archiveFileName = "VJPrayerFlicker-v${pluginVersion}.jar"
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from java11PluginClasses
     from project(':kraken-api-java11').sourceSets.main.output
-    // shortest-path is shaded into upstream kraken-api for walker data files.
-    // Its classes stay out: ShortestPathPlugin would sideload beside this plugin.
-    // Those class files are already version 55.
-    def shortestPathJar = project(':kraken-api-java11').configurations.compileClasspath.find {
-        it.name.contains('shortest-path')
-    }
-    if (shortestPathJar == null) {
-        throw new GradleException('shortest-path was not on the kraken-api-java11 compile classpath')
-    }
-    from(zipTree(shortestPathJar)) {
-        exclude '**/*.class'
-        exclude 'META-INF/**'
-    }
+    // 5.5.1 bundles its own walker data and no longer shades shortest-path.
     exclude 'kraken.png'
     exclude 'com/kraken/api/service/ui/login/**'
     exclude 'com/kraken/api/core/script/breakhandler/**'
@@ -146,7 +136,7 @@ tasks.register('shadedJarJava11', Jar) {
     exclude 'META-INF/*.RSA'
     manifest {
         attributes(
-                'Kraken-API': '5.4.1',
+                'Kraken-API': '5.5.1',
                 'Kraken-API-Bytecode': '55',
                 'Automatic-Module-Name': 'com.piggyplugins.krakenprayerflicker'
         )

@@ -1,31 +1,32 @@
-VJPrayerFlicker.jar
+VJPrayerFlicker-v2.jar
 
-This jar bundles the Kraken Prayer Flicker plugin with Kraken API 5.4.1, compiled
+This jar bundles the Kraken Prayer Flicker plugin with Kraken API 5.5.1, compiled
 for Java 11 (class file version 55), so it can be sideloaded in vanilla RuneLite
 running on a Java 11 JRE. Kraken API is loaded from its own hooks.json resource.
-No hook names were rewritten. hooks.json is the unmodified 5.4.1 resource.
+No hook names were rewritten. hooks.json is the unmodified 5.5.1 resource,
+mapped for RuneLite 1.13.8, game revision 243.
 
-Modifications to Kraken API 5.4.1 (GNU GPL v3, section 5):
-The Java sources are tag 5.4.1, vendored at KrakenPrayerFlicker/kraken-api-java11/src,
+Modifications to Kraken API 5.5.1 (GNU GPL v3, section 5):
+The Java sources are tag 5.5.1, vendored at kraken-api-java11/src,
 compiled with javac --release 11 instead of the upstream Java 17 toolchain.
-KrakenPrayerFlicker/kraken-api-5.4.1-java11.patch records every change.
+kraken-api-5.5.1-java11.patch records every change.
 
 This jar does not contain Kraken's login package, the login hook class, or the
 break-handler package. That code reads the RuneLite credentials file (session id,
 character id, and display name) or exists only to call it. hooks.json is still the
-unmodified 5.4.1 resource. GameHooks and HooksLoader no longer map or return the
+unmodified 5.5.1 resource. GameHooks and HooksLoader no longer map or return the
 login hook group. ClickScheduler still calls Client.getAccountHash(), through
 reflection, so the class file does not name the Jagex interface that declares it.
 No packet or interaction hook names were edited.
 
-Kraken API 5.4.1
+Kraken API 5.5.1
 Copyright the Kraken API authors
-https://github.com/Kraken-Plugins/kraken-api/tree/5.4.1
+https://github.com/Kraken-Plugins/kraken-api/tree/5.5.1
 License: GNU General Public License v3.0 (see kraken-api-GPL-3.0.txt).
-The published Maven POM also says MIT; the source repository LICENSE at tag 5.4.1 is GPL-3.0.
+The published Maven POM also says MIT; the source repository LICENSE at tag 5.5.1 is GPL-3.0.
 Corresponding source for this binary: the vendored tree above plus
-kraken-api-5.4.1-java11.patch. Upstream tarball:
-https://github.com/Kraken-Plugins/kraken-api/archive/refs/tags/5.4.1.tar.gz
+kraken-api-5.5.1-java11.patch. Upstream tarball:
+https://github.com/Kraken-Plugins/kraken-api/archive/refs/tags/5.5.1.tar.gz
 
 PiggyPlugins Kraken Prayer Flicker
 Original quick-prayer behavior by Ethan Vann, maintained by Piggy Plugins.

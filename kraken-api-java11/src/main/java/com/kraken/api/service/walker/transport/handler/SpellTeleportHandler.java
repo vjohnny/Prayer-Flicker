@@ -10,6 +10,7 @@ import com.kraken.api.service.util.SleepService;
 import com.kraken.api.service.walker.HomeTeleportPlan;
 import com.kraken.api.service.walker.transport.TransportContext;
 import com.kraken.api.service.walker.transport.TransportHandler;
+import com.kraken.api.util.StringUtils;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.coords.WorldPoint;
 
@@ -17,7 +18,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -64,6 +64,30 @@ public class SpellTeleportHandler implements TransportHandler {
     }
 
     /**
+     * Reports why the spell a transport names cannot be cast right now.
+     *
+     * <p>A registered spell teleport states no runes, level or spellbook of its own, so this is what
+     * keeps it out of a route the player cannot cast, and what names the reason when the cast is
+     * refused at the last moment.</p>
+     *
+     * @param magic the magic service that judges castability
+     * @param displayInfo the display info naming the spell
+     * @return the reason, or null when the spell can be cast
+     */
+    public static String castRefusal(MagicService magic, String displayInfo) {
+        CastableSpell spell = findSpell(displayInfo);
+        if (spell == null) {
+            return "no spell is named '" + displayInfo + "'";
+        }
+        if (magic == null) {
+            return "the magic service is unavailable";
+        }
+
+        String refusal = magic.castRefusal(spell);
+        return refusal != null ? spell.getName() + " cannot be cast: " + refusal : null;
+    }
+
+    /**
      * Spells the dataset names differently from the spellbook enums.
      *
      * <p>Only genuine naming differences belong here. Teleports the spellbooks do not model at all —
@@ -89,7 +113,7 @@ public class SpellTeleportHandler implements TransportHandler {
      * @param displayInfo the transport's display info
      * @return the matching spell, or null when none does
      */
-    static CastableSpell findSpell(String displayInfo) {
+    public static CastableSpell findSpell(String displayInfo) {
         if (displayInfo == null || displayInfo.trim().isEmpty()) {
             return null;
         }
@@ -161,17 +185,6 @@ public class SpellTeleportHandler implements TransportHandler {
 
     /** Spell names differ from display info in punctuation and spacing more than in wording. */
     private static String normalise(String value) {
-        if (value == null) {
-            return "";
-        }
-
-        StringBuilder builder = new StringBuilder();
-        for (char c : value.toLowerCase(Locale.ROOT).toCharArray()) {
-            if (Character.isLetterOrDigit(c)) {
-                builder.append(c);
-            }
-        }
-
-        return builder.toString();
+        return StringUtils.lettersAndDigits(value);
     }
 }

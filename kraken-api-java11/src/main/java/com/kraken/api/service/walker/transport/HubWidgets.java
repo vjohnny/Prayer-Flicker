@@ -1,12 +1,12 @@
 package com.kraken.api.service.walker.transport;
 
+import com.kraken.api.util.StringUtils;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.gameval.InterfaceID;
-import shortestpath.transport.TransportType;
+import com.kraken.api.service.walker.transport.registry.TransportCategory;
 
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -62,7 +62,7 @@ public final class HubWidgets {
      * @param displayInfo the parsed destination, may be null
      * @return the packed component id, or {@link #NOT_FOUND} when this hub is not selected this way
      */
-    public static int component(TransportType type, DisplayInfo displayInfo) {
+    public static int component(TransportCategory type, DisplayInfo displayInfo) {
         if (type == null || displayInfo == null) {
             return NOT_FOUND;
         }
@@ -86,7 +86,7 @@ public final class HubWidgets {
      * @param type the kind of hub being used
      * @return the interface group id, or {@link #NOT_FOUND}
      */
-    public static int textInterfaceGroup(TransportType type) {
+    public static int textInterfaceGroup(TransportCategory type) {
         if (type == null) {
             return NOT_FOUND;
         }
@@ -103,12 +103,12 @@ public final class HubWidgets {
      * Reports whether a hub is selected by clicking a component this class can name.
      *
      * @param type the kind of hub being used
-     * @return true when {@link #component(TransportType, DisplayInfo)} can serve it
+     * @return true when {@link #component(TransportCategory, DisplayInfo)} can serve it
      */
-    public static boolean hasFixedComponents(TransportType type) {
-        return type == TransportType.MAGIC_MUSHTREE
-                || type == TransportType.GNOME_GLIDER
-                || type == TransportType.HOT_AIR_BALLOON;
+    public static boolean hasFixedComponents(TransportCategory type) {
+        return type == TransportCategory.MAGIC_MUSHTREE
+                || type == TransportCategory.GNOME_GLIDER
+                || type == TransportCategory.HOT_AIR_BALLOON;
     }
 
     private static int positional(Class<?> holder, String prefix, int position) {
@@ -137,17 +137,6 @@ public final class HubWidgets {
 
     /** Destination names are compared without case, spacing or punctuation. */
     private static String key(String value) {
-        if (value == null) {
-            return "";
-        }
-
-        StringBuilder builder = new StringBuilder(value.length());
-        for (char c : value.toLowerCase(Locale.ROOT).toCharArray()) {
-            if (Character.isLetterOrDigit(c)) {
-                builder.append(c);
-            }
-        }
-
-        return builder.toString();
+        return StringUtils.lettersAndDigits(value);
     }
 }

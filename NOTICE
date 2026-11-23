@@ -11,19 +11,19 @@ The in-client name is [VJ]Prayer Flicker. The minimap-orb toggle from the
 original plugin is not included. Turning the flicker off is queued onto the
 RuneLite client thread and does not block the Swing thread.
 
-Kraken API 5.4.1
+Kraken API 5.5.1
 Copyright the Kraken API authors
-https://github.com/Kraken-Plugins/kraken-api/tree/5.4.1
+https://github.com/Kraken-Plugins/kraken-api/tree/5.5.1
 License: GNU General Public License v3.0 (see licenses/kraken-api-GPL-3.0.txt
 and kraken-api-java11/LICENSE).
 The published Maven POM also says MIT. The source repository LICENSE at tag
-5.4.1 is GPL-3.0. GPL-3 section 13 allows this combination with AGPL-3.0.
+5.5.1 is GPL-3.0. GPL-3 section 13 allows this combination with AGPL-3.0.
 
 Vendored sources: kraken-api-java11/src
-Patch: kraken-api-5.4.1-java11.patch
-Upstream tarball: https://github.com/Kraken-Plugins/kraken-api/archive/refs/tags/5.4.1.tar.gz
+Patch: kraken-api-5.5.1-java11.patch
+Upstream tarball: https://github.com/Kraken-Plugins/kraken-api/archive/refs/tags/5.5.1.tar.gz
 
-Modifications to Kraken API 5.4.1:
+Modifications to Kraken API 5.5.1:
 
 1. Compiled with javac --release 11 (class file version 55) instead of the
    upstream Java 17 toolchain.
@@ -32,7 +32,8 @@ Modifications to Kraken API 5.4.1:
    file or exists only to call it.
 3. GameHooks and HooksLoader no longer map or return the login hook group, so
    loading hooks does not require the login hook class. hooks.json itself is
-   the unmodified 5.4.1 resource. No hook names were rewritten.
+   the unmodified 5.5.1 resource, mapped for RuneLite 1.13.8 revision 243.
+   No hook names were rewritten.
 4. ClickScheduler still calls Client.getAccountHash(), through reflection, so
    the class file does not name the Jagex interface that declares that method.
    The method and its result are unchanged.

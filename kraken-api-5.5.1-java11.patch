@@ -1,27 +1,12 @@
---- a/build.gradle	2026-11-22 05:05:38.287903001 +0000
-+++ b/build.gradle	2026-11-22 05:05:38.287903001 +0000
-@@ -96,9 +96,12 @@
- java {
-     withSourcesJar()
-     withJavadocJar()
--    toolchain {
--        languageVersion = JavaLanguageVersion.of(17)
--    }
-+}
-+
-+// PiggyPlugins Java 11 port: upstream tag 5.4.1 targets a Java 17 toolchain.
-+// Class files are emitted as version 55. Source edits are appended below:
-+// GameHooks and HooksLoader no longer reference LoginHooks, and ClickScheduler
-+// reads Client.getAccountHash() without naming OAuthApi.
-+tasks.withType(JavaCompile).configureEach {
-+    options.release = 11
- }
- 
- jar {
+Kraken API 5.5.1 compiled with javac --release 11.
+Upstream GameHooks, HooksLoader, and ClickScheduler are unchanged from 5.4.1.
+These diffs drop the login hook type from the two hook classes and read
+Client.getAccountHash() without naming the Jagex interface that declares it.
+Login sources are also excluded from compilation in kraken-api-java11/build.gradle.
 
---- a/kraken-api-java11/src/main/java/com/kraken/api/core/hooks/GameHooks.java
-+++ b/kraken-api-java11/src/main/java/com/kraken/api/core/hooks/GameHooks.java
-@@ -8,8 +8,8 @@ import java.util.List;
+--- a/src/main/java/com/kraken/api/core/hooks/GameHooks.java
++++ b/src/main/java/com/kraken/api/core/hooks/GameHooks.java
+@@ -8,8 +8,8 @@
  
  /**
   * The obfuscation hooks the client needs for one RuneLite revision: the RuneLite version they were
@@ -32,7 +17,7 @@
   */
  @Data
  @AllArgsConstructor
-@@ -20,8 +20,6 @@ public class GameHooks {
+@@ -20,8 +20,6 @@
      private Integer revision;
      /** Hooks used to reach client fields and methods by reflection. */
      private ReflectionHooks reflectionHooks;
@@ -41,10 +26,9 @@
      /** Hooks for the mouse hook DLL, the call stack and the PlatformInfo fields sent at login. */
      private SecurityHooks securityHooks;
      /** The packet definitions available to the packet layer. */
-
---- a/kraken-api-java11/src/main/java/com/kraken/api/core/hooks/HooksLoader.java
-+++ b/kraken-api-java11/src/main/java/com/kraken/api/core/hooks/HooksLoader.java
-@@ -32,8 +32,6 @@ public class HooksLoader {
+--- a/src/main/java/com/kraken/api/core/hooks/HooksLoader.java
++++ b/src/main/java/com/kraken/api/core/hooks/HooksLoader.java
+@@ -32,8 +32,6 @@
  
      private static ReflectionHooks reflectionHooks;
  
@@ -53,7 +37,7 @@
      private static SecurityHooks securityHooks;
  
      private static Exception loadFailure;
-@@ -50,7 +48,7 @@ public class HooksLoader {
+@@ -50,7 +48,7 @@
                      gson,
                      GameHooks.class
              );
@@ -62,7 +46,7 @@
                  throw new IllegalStateException("Parsed hooks file was null.");
              }
  
-@@ -58,8 +56,7 @@ public class HooksLoader {
+@@ -58,8 +56,7 @@
                      .collect(Collectors.toMap(PacketDefinition::getName, p -> p));
              reflectionHooks = gameHooks.getReflectionHooks();
              securityHooks = gameHooks.getSecurityHooks();
@@ -72,7 +56,7 @@
                      gameHooks.getRuneliteVersion(), gameHooks.getRevision());
          } catch (Exception e) {
              loadFailure = e;
-@@ -82,8 +79,8 @@ public class HooksLoader {
+@@ -82,8 +79,8 @@
      }
  
      /**
@@ -83,7 +67,7 @@
       * Kraken API version is older or newer than the running RuneLite client.
       *
       * @param clientRevision The revision reported by the running client, {@code Client.getRevision()}.
-@@ -95,7 +92,7 @@ public class HooksLoader {
+@@ -95,7 +92,7 @@
              return false;
          }
          log.warn("hooks.json was mapped for game revision {} (RuneLite {}) but the client is running revision {}. "
@@ -92,11 +76,10 @@
                  hooksRevision, gameHooks.getRuneliteVersion(), clientRevision);
          return true;
      }
-@@ -133,17 +130,6 @@ public class HooksLoader {
-         return reflectionHooks;
+@@ -134,17 +131,6 @@
      }
  
--    /**
+     /**
 -     * Returns the login hooks.
 -     *
 -     * @return The parsed {@link LoginHooks}.
@@ -107,13 +90,13 @@
 -        return loginHooks;
 -    }
 -
-     /**
+-    /**
       * Returns the security hooks.
       *
-
---- a/kraken-api-java11/src/main/java/com/kraken/api/core/interaction/timing/ClickScheduler.java
-+++ b/kraken-api-java11/src/main/java/com/kraken/api/core/interaction/timing/ClickScheduler.java
-@@ -15,6 +15,7 @@ import net.runelite.api.events.GameTick;
+      * @return The parsed {@link SecurityHooks}.
+--- a/src/main/java/com/kraken/api/core/interaction/timing/ClickScheduler.java
++++ b/src/main/java/com/kraken/api/core/interaction/timing/ClickScheduler.java
+@@ -15,6 +15,7 @@
  import net.runelite.client.eventbus.EventBus;
  import net.runelite.client.eventbus.Subscribe;
  
@@ -121,7 +104,7 @@
  import java.util.ArrayList;
  import java.util.Comparator;
  import java.util.List;
-@@ -141,7 +142,7 @@ public class ClickScheduler {
+@@ -141,7 +142,7 @@
      @Inject
      public ClickScheduler(EventBus eventBus, Client client, ClickHistory clickHistory) {
          this(System::currentTimeMillis, new Random(), HumanClickGap.DEFAULT, clickHistory::getLastClickMillis,
@@ -130,11 +113,10 @@
          eventBus.register(this);
      }
  
-@@ -168,6 +169,20 @@ public class ClickScheduler {
-         this.accountHash = accountHash;
+@@ -169,6 +170,20 @@
      }
  
-+    /**
+     /**
 +     * Reads {@code Client.getAccountHash()} without naming the interface that declares it.
 +     * A direct call compiles to that interface, and this jar must not contain that name.
 +     * The method and its result are unchanged.
@@ -148,6 +130,7 @@
 +        }
 +    }
 +
-     /**
++    /**
       * Sets the cutoff that clicks without their own deadline must leave by.
       *
+      * @param cutoffMs milliseconds after the start of a tick, from 1 to {@link #TICK_LENGTH_MS}.
