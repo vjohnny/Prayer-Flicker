@@ -113,6 +113,13 @@ public class KrakenPrayerFlickerPlugin extends Plugin {
         if (prayerService.isOutOfPrayer()) {
             return;
         }
+        // High Alchemy and "Use" put a widget in target mode. The flick below is a
+        // client menu click, which clears that selection. Skip those ticks and resume
+        // once the spell or item is no longer selected. Prayers stay as they are for
+        // the missed ticks.
+        if (ctx.getClient().isWidgetSelected()) {
+            return;
+        }
         // Same tick sequence as EthanPrayerFlickerPlugin.onGameTick:
         // off then on when already active, otherwise just turn them on.
         prayerService.flickQuickPrayers();
