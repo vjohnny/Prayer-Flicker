@@ -117,7 +117,7 @@ public class KrakenPrayerFlickerPlugin extends Plugin {
         // client menu click, which clears that selection. Skip those ticks and resume
         // once the spell or item is no longer selected. Prayers stay as they are for
         // the missed ticks.
-        if (ctx.getClient().isWidgetSelected()) {
+        if (config.pauseWhileSelected() && ctx.getClient().isWidgetSelected()) {
             return;
         }
         // Same tick sequence as EthanPrayerFlickerPlugin.onGameTick:
