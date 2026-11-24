@@ -1,8 +1,13 @@
 Kraken API 5.5.1 compiled with javac --release 11.
-Upstream GameHooks, HooksLoader, and ClickScheduler are unchanged from 5.4.1.
-These diffs drop the login hook type from the two hook classes and read
-Client.getAccountHash() without naming the Jagex interface that declares it.
-Login sources are also excluded from compilation in kraken-api-java11/build.gradle.
+These diffs drop the login hook type from GameHooks and HooksLoader.
+Login sources and the break-handler package are excluded from compilation in
+kraken-api-java11/build.gradle. They stay in the tree.
+
+v3 also removes modules [VJ]Prayer Flicker does not reach. Those deletions are
+the file list in NOTICE, not a hunk in this patch. ClickScheduler is one of the
+removed classes. While it was shipped, it called Client.getAccountHash() through
+reflection so the class file did not name the Jagex interface that declares that
+method. That class is not compiled into VJPrayerFlicker-v3.jar.
 
 --- a/src/main/java/com/kraken/api/core/hooks/GameHooks.java
 +++ b/src/main/java/com/kraken/api/core/hooks/GameHooks.java
@@ -94,43 +99,3 @@ Login sources are also excluded from compilation in kraken-api-java11/build.grad
       * Returns the security hooks.
       *
       * @return The parsed {@link SecurityHooks}.
---- a/src/main/java/com/kraken/api/core/interaction/timing/ClickScheduler.java
-+++ b/src/main/java/com/kraken/api/core/interaction/timing/ClickScheduler.java
-@@ -15,6 +15,7 @@
- import net.runelite.client.eventbus.EventBus;
- import net.runelite.client.eventbus.Subscribe;
- 
-+import java.lang.reflect.Method;
- import java.util.ArrayList;
- import java.util.Comparator;
- import java.util.List;
-@@ -141,7 +142,7 @@
-     @Inject
-     public ClickScheduler(EventBus eventBus, Client client, ClickHistory clickHistory) {
-         this(System::currentTimeMillis, new Random(), HumanClickGap.DEFAULT, clickHistory::getLastClickMillis,
--                clickHistory::getLastClickPoint, client::getAccountHash);
-+                clickHistory::getLastClickPoint, () -> readAccountHash(client));
-         eventBus.register(this);
-     }
- 
-@@ -169,6 +170,20 @@
-     }
- 
-     /**
-+     * Reads {@code Client.getAccountHash()} without naming the interface that declares it.
-+     * A direct call compiles to that interface, and this jar must not contain that name.
-+     * The method and its result are unchanged.
-+     */
-+    private static long readAccountHash(Client client) {
-+        try {
-+            Method method = Client.class.getMethod("getAccountHash");
-+            return (Long) method.invoke(client);
-+        } catch (ReflectiveOperationException e) {
-+            throw new IllegalStateException("Could not read the account hash", e);
-+        }
-+    }
-+
-+    /**
-      * Sets the cutoff that clicks without their own deadline must leave by.
-      *
-      * @param cutoffMs milliseconds after the start of a tick, from 1 to {@link #TICK_LENGTH_MS}.

@@ -2,9 +2,11 @@ plugins {
     id 'java-library'
 }
 
-// Compiles Kraken API 5.5.1 sources (this directory's src/main) to class file
-// version 55. See ../kraken-api-5.5.1-java11.patch. Login and break-handler
-// sources are excluded below; GameHooks, HooksLoader, and ClickScheduler are edited.
+// Compiles the Kraken API 5.5.1 sources this plugin still reaches, to class file
+// version 55. See ../kraken-api-5.5.1-java11.patch and ../NOTICE. Login and
+// break-handler sources stay in the tree and are excluded below. GameHooks and
+// HooksLoader do not map the login hook group. Modules the prayer flicker does
+// not reach are not in this tree.
 
 repositories {
     mavenCentral()

@@ -1,23 +1,77 @@
-VJPrayerFlicker-v2.jar
+VJPrayerFlicker-v3.jar
 
-This jar bundles the Kraken Prayer Flicker plugin with Kraken API 5.5.1, compiled
-for Java 11 (class file version 55), so it can be sideloaded in vanilla RuneLite
-running on a Java 11 JRE. Kraken API is loaded from its own hooks.json resource.
-No hook names were rewritten. hooks.json is the unmodified 5.5.1 resource,
-mapped for RuneLite 1.13.8, game revision 243.
+This jar bundles the [VJ]Prayer Flicker plugin with the subset of Kraken API 5.5.1
+that the plugin reaches, compiled for Java 11 (class file version 55), so it can be
+sideloaded in vanilla RuneLite running on a Java 11 JRE. hooks.json is the unmodified
+5.5.1 resource, mapped for RuneLite 1.13.8, game revision 243. No hook names were
+rewritten. The jar does not download hooks.
+
+Kept Kraken types (the plugin's Guice graph and the quick-prayer click):
+
+Context, ClientThreadGateway, and ClientThreadException. Context is constructed with
+the RuneLite client, the client thread, and InteractionManager. It still loads
+hooks.json, warns on a revision mismatch, and mutes the client's doAction logger
+through the security hook field name. It does not construct the virtual mouse, bank
+service, shop service, item manager, or local-player entity, and it does not register
+those services on the event bus.
+
+PrayerService methods the plugin calls: isOutOfPrayer, isQuickPrayerEnabled,
+toggleQuickPrayers, enableQuickPrayers, disableQuickPrayers, and flickQuickPrayers.
+Individual prayer toggles and scheduled clicks are not included, so ClickScheduler
+is not injected.
+
+InteractionManager.interact(widgetId, childId, itemId, action), which is the call
+toggleQuickPrayers makes on the quick-prayer orb and the call the plugin makes on a
+quick-prayer slot. The click point is UIService.getClickingPoint on the widget
+bounds with randomization, the same point ClickPoints returned when no sampler was
+registered. This build does not register a sampler. InteractionDispatcher,
+DoActionInvoker, MenuOption, and ResolvedMenuAction perform that click.
+
+MousePackets, PacketClient, and PacketFactory remain. A quick-prayer click still
+queues the EVENT_MOUSE_CLICK packet and then calls doAction. PacketFactory in this
+build only looks up EVENT_MOUSE_CLICK. PacketPayload, BufferUtils, PacketDefinition,
+PacketWrite, BufferOperation, and PacketType encode that packet. WidgetPackets,
+MovementPackets, and ClientPackets are not included.
+
+HooksLoader, GameHooks, ReflectionHooks, SecurityHooks, PlatformInfoField,
+HookResolver, JsonResourceUtils, and GarbageValueUtils. hooks.json still contains
+its login hook group as data. GameHooks does not declare that group and HooksLoader
+does not return it.
+
+UIService's widget clickbox helpers and RandomService, which implements the click
+distribution. Services, used when the default canvas rectangle is requested.
+InputDispatch, MathUtils, and RandomUtils, used by the mouse-click packet's idle
+reset. KrakenClickSent, posted on the event bus after that packet, as MousePackets
+already did.
+
+Removed from this build, and absent from this jar:
+
+Walker and pathfinding, including walker/collision-map.zip, walker/dataset.json,
+walker/transports.json, and walker/NOTICE.txt. That collision map and the transport
+data came from the shortest-path project; they are not bundled here.
+DPS tables (dps/equipment.json, equipment_aliases.json, monsters.json, spells.json).
+kraken.png.
+Query, container, banking, deposit box, grand exchange, shop, inventory, equipment,
+NPC, player, world, projectile, and graphics-object types.
+Teleports, magic, sailing, dialogue, camera, movement, and map services.
+Virtual mouse, mouse recording, and path replay (VirtualMouse, MouseRecorder,
+PathLibrary, and the movement strategies).
+Scripts, tasks, and the click scheduler (ClickScheduler, HumanClickGap, and the
+rest of the timing package).
+Overlays.
 
 Modifications to Kraken API 5.5.1 (GNU GPL v3, section 5):
-The Java sources are tag 5.5.1, vendored at kraken-api-java11/src,
+The Java sources that remain are tag 5.5.1, vendored at kraken-api-java11/src,
 compiled with javac --release 11 instead of the upstream Java 17 toolchain.
-kraken-api-5.5.1-java11.patch records every change.
+kraken-api-5.5.1-java11.patch records the GameHooks and HooksLoader edits. The
+module list above is the rest of the trim.
 
 This jar does not contain Kraken's login package, the login hook class, or the
-break-handler package. That code reads the RuneLite credentials file (session id,
-character id, and display name) or exists only to call it. hooks.json is still the
-unmodified 5.5.1 resource. GameHooks and HooksLoader no longer map or return the
-login hook group. ClickScheduler still calls Client.getAccountHash(), through
-reflection, so the class file does not name the Jagex interface that declares it.
-No packet or interaction hook names were edited.
+break-handler package. Those sources remain in the tree and are excluded from
+compilation. They read the RuneLite credentials file (session id, character id,
+and display name) or exist only to call that code. ClickScheduler is not in this
+jar, so the earlier reflection read of Client.getAccountHash() on that class is
+not part of this build. No packet or interaction hook names were edited.
 
 Kraken API 5.5.1
 Copyright the Kraken API authors
