@@ -28,14 +28,22 @@ Modifications to Kraken API 5.5.1:
 1. Compiled with javac --release 11 (class file version 55) instead of the
    upstream Java 17 toolchain.
 2. The login package, the login hook class, and the break-handler package are
-   not compiled into the sideload jar. That code reads the RuneLite credentials
-   file or exists only to call it.
+   not compiled into the sideload jar. Those sources stay in the tree and are
+   excluded from compilation. That code reads the RuneLite credentials file or
+   exists only to call it.
 3. GameHooks and HooksLoader no longer map or return the login hook group, so
    loading hooks does not require the login hook class. hooks.json itself is
    the unmodified 5.5.1 resource, mapped for RuneLite 1.13.8 revision 243.
    No hook names were rewritten.
-4. ClickScheduler still calls Client.getAccountHash(), through reflection, so
-   the class file does not name the Jagex interface that declares that method.
-   The method and its result are unchanged.
+4. VJPrayerFlicker-v3.jar contains only the Kraken types [VJ]Prayer Flicker
+   reaches. Quick-prayer clicks still go through InteractionManager, the
+   EVENT_MOUSE_CLICK packet (MousePackets, PacketClient, PacketFactory), and
+   DoActionInvoker. Walker data (including collision-map.zip), DPS tables,
+   queries, banking, the grand exchange, shops, pathfinding, teleports, the
+   virtual mouse, mouse recording, scripts, and the click scheduler
+   (ClickScheduler, HumanClickGap) are not in that jar. ClickScheduler's
+   reflective Client.getAccountHash() read is not part of v3 because that
+   class is not shipped. licenses/NOTICE-java11.txt is the notice copied into
+   the jar.
 
 RuneLite client classes are not bundled. They are provided by the running client.

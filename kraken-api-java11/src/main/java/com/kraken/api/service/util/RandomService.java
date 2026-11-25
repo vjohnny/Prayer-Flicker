@@ -1,17 +1,15 @@
 package com.kraken.api.service.util;
 
 import com.google.inject.Singleton;
-import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Point;
 
 import java.awt.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Random values and points for human-like timing and mouse positions: Gaussian and skewed numbers, random
- * points inside rectangles and screen points, dice rolls and random waits.
+ * Random points for widget clicks. The distribution used by quick-prayer clicks is
+ * {@link #randomPointEx}. Waits that delegated to the removed sleep helper are not included.
  */
-@Slf4j
 @Singleton
 public class RandomService {
 
@@ -232,85 +230,6 @@ public class RandomService {
     }
 
     /**
-     * Simulates a dice roll using a fractional probability (e.g., 0.1 for 10%).
-     *
-     * @param fractionalChance A decimal between 0 and 1 representing the chance.
-     *
-     * @return True if the random number falls within the chance, false otherwise.
-     */
-    public static boolean diceFractional(double fractionalChance) {
-        // Generate a random number between 0 and 1 and compare
-        return RANDOM.nextDouble() < fractionalChance;
-    }
-
-    /**
-     * Simulates a dice roll using a whole number percentage (e.g., 10 for 10%).
-     *
-     * @param percentageChance A whole number between 0 and 100 representing the chance.
-     *
-     * @return True if the random number falls within the chance, false otherwise.
-     */
-    public static boolean dicePercentage(double percentageChance) {
-        // Generate a random number between 0 and 100 and compare
-        return RANDOM.nextDouble() * 100 < percentageChance;
-    }
-
-    /**
-     * Simulates a wait with a random duration, biased towards the mean, left, or right of the given range.
-     * This method is useful for introducing randomness in bot actions to reduce predictability.
-     *
-     * @param min    The minimum wait time in milliseconds.
-     * @param max    The maximum wait time in milliseconds.
-     * @param weight The direction of bias for the wait time (left, mean, or right skew).
-     */
-    public static void wait(double min, double max, EWaitDir weight) {
-        switch (weight) {
-            case wdLeft:
-                systemWait(Math.round(truncatedGauss(min, max, 0)));
-                break;
-            case wdMean:
-                systemWait(Math.round(normalRange(min, max, 0)));
-                break;
-            case wdRight:
-                systemWait(Math.round(truncatedGauss(max, min, 0)));
-                break;
-        }
-    }
-
-    /**
-     * Simulates a wait with a random duration, biased towards the left side of the given range.
-     *
-     * @param min The minimum wait time in milliseconds.
-     * @param max The maximum wait time in milliseconds.
-     */
-    public static void wait(int min, int max) {
-        wait(min, max, EWaitDir.wdLeft);
-    }
-
-    /**
-     * Waits for a random duration based on a Gaussian distribution.
-     * The wait time is calculated using a normal distribution with the specified mean and standard deviation.
-     *
-     * @param mean The mean wait time in milliseconds.
-     * @param dev  The standard deviation of the wait time.
-     */
-    public static void waitEx(double mean, double dev) {
-        long waitTime = Math.abs(Math.round(gaussRand(mean, dev)));
-        systemWait(waitTime);
-    }
-
-    /**
-     * Pauses the execution for a specified amount of time in milliseconds.
-     * This method is a system-level wait used for simulating delays in bot actions.
-     *
-     * @param time The duration to wait in milliseconds.
-     */
-    private static void systemWait(long time) {
-        log.info("Waiting for {} ms", time);
-        SleepService.sleep(time);
-    }
-
-    /**
      * Rotates a given point around a specified origin by a certain angle.
      * This method is used for calculating rotated positions in 2D space.
      *
@@ -412,9 +331,5 @@ public class RandomService {
             value = 0;
         }
         return value;
-    }
-
-    enum EWaitDir {
-        wdLeft, wdMean, wdRight
     }
 }
